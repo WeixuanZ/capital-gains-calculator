@@ -91,6 +91,12 @@ def test_treaty_from_isin_when_currency_is_not_the_source_country() -> None:
     assert _treaty_country(_dividend_pair(CurrencyCode("GBP"), US_ISIN)) == "USA"
 
 
+def test_spanish_dividend_gets_the_spain_treaty() -> None:
+    """Spain withholds 19%, and the treaty limits portfolio dividends to 10%."""
+    pair = _dividend_pair(CurrencyCode("GBP"), Isin("ES0000000002"), Decimal("0.19"))
+    assert _treaty_country(pair) == "Spain"
+
+
 def test_treaty_from_currency_when_no_isin_is_available() -> None:
     """Brokers that supply no ISIN keep the behaviour they had before."""
     assert _treaty_country(_dividend_pair(CurrencyCode("USD"), None)) == "USA"

@@ -275,12 +275,14 @@ cgt-calc does not treat the conversion as a disposal and reports no gain or loss
 
 ### Known limitations
 
-- Some tax withheld is left in the amount received and does not appear separately in the report: tax
-    in pounds or pence, whatever your account's currency, tax with no currency given, and tax on
-    fund interest distributions (`Dividend (Interest)`). Tax in pounds may be UK tax, for example on
-    a property income distribution, which is not foreign tax. Add that tax to your income yourself
-    and, if you use [`--income`](../usage.md#estimate-the-tax-from-your-income), to the figure you
-    pass.
+- Tax in pounds or pence on a share from outside the UK, such as Spain's tax on a London-traded
+    Spanish share, is foreign tax that Trading 212 has already converted. In a pound account it is
+    recorded as tax at source, as other foreign tax is. Some tax withheld is still left in the
+    amount received and does not appear separately in the report: tax in pounds or pence on a UK
+    share, which may be UK tax, for example on a property income distribution; tax in pounds or
+    pence in an account in another currency; tax with no currency given; and tax on fund interest
+    distributions (`Dividend (Interest)`). Add that tax to your income yourself and, if you use
+    [`--income`](../usage.md#estimate-the-tax-from-your-income), to the figure you pass.
 - cgt-calc does not use a dividend row's label to tell income from capital.
     `Dividend (Tax exempted)` is on rows where Trading 212 records no tax withheld, and the exports
     examined use it both for ordinary dividends and for repayments of share premium. cgt-calc

@@ -252,6 +252,7 @@ class CapitalGainsCalculator:
             exempt_disposal_count=walked.exempt_disposal_count,
             exempt_disposal_proceeds=round_decimal(walked.exempt_disposal_proceeds, 2),
             dividends_carry_tax_credit=self.tax_year < FIRST_DIVIDEND_ALLOWANCE_YEAR,
+            written_options=self.history.open_written_options(self.tax_year_end_date),
         )
 
     def make_portfolio_entry(

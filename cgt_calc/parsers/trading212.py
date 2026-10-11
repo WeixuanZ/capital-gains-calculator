@@ -679,22 +679,36 @@ class Trading212Transaction(BrokerTransaction):
         other. The row's exchange rate is not used: exports made before late
         2025 give none on a dividend, and it adds nothing to these figures.
 
-        Tax in pounds or pence stays in the amount received, whatever the
-        account's currency: it may be UK tax, for example on a property income
-        distribution, which is not foreign tax. So does tax with no currency
-        given, which an export means as the account's currency. So does the tax
-        on a row that takes a dividend back: treaty relief is worked out per
-        payment, so converting the reversal would cancel the dividend but leave
-        the original's relief standing.
+        Tax in pounds or pence on a non-UK security is foreign tax, which
+        Trading 212 has converted: for example, the tax Spain takes from the
+        dividend of a Spanish company traded in London. In a pound
+        account it is used as it is, and pence as hundredths of a pound.
+        On a UK security it stays in the amount received: it may be UK tax, for
+        example on a property income distribution, which is not foreign tax. So
+        it does in an account in another currency, which the row gives no rate
+        to convert it to. Tax with no currency given stays too, and so does the
+        tax on a row that takes a dividend back: treaty relief is worked out
+        per payment, so converting the reversal would cancel the dividend but
+        leave the original's relief standing.
         """
         tax = self.withholding_tax
         if (
             self.action is not ActionType.DIVIDEND
             or self.amount is None
             or not tax
-            or self.withholding_currency in {None, UK_CURRENCY, "GBX"}
+            or self.withholding_currency is None
         ):
             return None
+        if self.withholding_currency in {UK_CURRENCY, "GBX"}:
+            foreign = self.isin is not None and not self.isin.startswith("GB")
+            if (
+                not foreign
+                or self.currency != UK_CURRENCY
+                or self.amount <= 0
+                or tax <= 0
+            ):
+                return None
+            return tax / 100 if self.withholding_currency == "GBX" else tax
         if self.amount > 0 and tax > 0:
             if self.withholding_currency == self.currency:
                 return tax

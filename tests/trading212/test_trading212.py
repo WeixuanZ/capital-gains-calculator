@@ -1590,7 +1590,7 @@ def test_tax_in_pounds_or_pence_is_left_in_the_amount_received(
     price_currency: str,
     tax_currency: str,
 ) -> None:
-    """Tax in pounds or pence may be UK tax, so it gets no tax row and no warning.
+    """Tax in pounds or pence on a UK share may be UK tax, so it stays as received.
 
     Some exports leave the tax currency blank, which means the currency of
     the transaction. A share priced in pence has its tax in pence.
@@ -1599,6 +1599,7 @@ def test_tax_in_pounds_or_pence_is_left_in_the_amount_received(
     row = _make_dividend_row(
         "8.50",
         {
+            Trading212Column.ISIN: "GB0000000009",
             Trading212Column.CURRENCY_PRICE_PER_SHARE: price_currency,
             Trading212Column.EXCHANGE_RATE: "",
             Trading212Column.CURRENCY_WITHHOLDING_TAX: tax_currency,
@@ -1620,6 +1621,43 @@ def _dividend_and_tax(
 ) -> list[tuple[ActionType, str | None, Decimal | None, str]]:
     """Return what the calculation reads from dividend rows."""
     return [(t.action, t.symbol, t.amount, t.currency) for t in transactions]
+
+
+@pytest.mark.parametrize(
+    ("tax", "tax_currency"),
+    [("190", "GBX"), ("1.90", "GBP")],
+    ids=["pence", "pounds"],
+)
+def test_foreign_tax_in_pounds_or_pence_is_separated(
+    tmp_path: Path, tax: str, tax_currency: str
+) -> None:
+    """Tax in pence or pounds on a non-UK share is foreign tax, already converted.
+
+    A Spanish share traded in London pays its dividend in pence with Spain's
+    tax taken off in pence: 190p of tax on £8.10 received is a £10.00
+    dividend with £1.90 of tax at source.
+    """
+    row = _make_dividend_row(
+        "8.10",
+        {
+            Trading212Column.ISIN: "ES0000000002",
+            Trading212Column.PRICE_PER_SHARE: "8.1",
+            Trading212Column.CURRENCY_PRICE_PER_SHARE: "GBX",
+            Trading212Column.EXCHANGE_RATE: "0.01",
+            Trading212Column.NO_OF_SHARES: "100",
+            Trading212Column.WITHHOLDING_TAX: tax,
+            Trading212Column.CURRENCY_WITHHOLDING_TAX: tax_currency,
+        },
+    )
+
+    transactions = Trading212Parser().load_from_dir(
+        _prepare_file(tmp_path, [HEADER_2024, row])
+    )
+
+    assert _dividend_and_tax(transactions) == [
+        (ActionType.DIVIDEND, "BAZ", Decimal("10.00"), "GBP"),
+        (ActionType.DIVIDEND_TAX, "BAZ", Decimal("-1.90"), "GBP"),
+    ]
 
 
 @pytest.mark.parametrize("exchange_rate", ["0.80", "Not available"])

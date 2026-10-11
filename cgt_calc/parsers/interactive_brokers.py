@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import csv
 import datetime
 from decimal import Decimal
 from enum import StrEnum
+import io
 from itertools import chain
 import re
-from typing import TYPE_CHECKING, ClassVar, Final, override
+from typing import TYPE_CHECKING, ClassVar, Final, TextIO, override
 
 from cgt_calc.exceptions import ParsingError
 from cgt_calc.model import ActionType, BrokerTransaction, CurrencyCode, Isin
 from cgt_calc.util import parse_decimal
 
 from .base_parsers import StandardCSVParser
+from .ibkr_options import StatementSummary, parse_ibkr_option, reconcile_ibkr_options
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -21,10 +24,22 @@ if TYPE_CHECKING:
 
 
 EXPECTED_COLS_IN_SUMMARY_SECTION: Final[int] = 4
+# IBKR rounds Gross Amount to the penny and prints Net Amount in full.
+NET_AMOUNT_ROUNDING: Final = Decimal("0.01")
 
 # Dividend and withholding rows name the security as "VT(US9220427424) Cash
 # Dividend ...". Trade rows carry a plain description, so this is best effort.
 _ISIN_IN_DESCRIPTION_RE: Final = re.compile(r"^[^\s(]+\((?P<isin>[A-Z0-9]{12})\)")
+
+
+# IBKR names a bond by issuer, coupon and maturity: "UKT 4 1/4 12/07/27" is the
+# 4.25% Treasury Gilt maturing on 7 December 2027.
+_BOND_SYMBOL_RE: Final = re.compile(
+    r"^(?P<issuer>\S+) \d+(?:\.\d+)?(?: \d+/\d+)? \d{2}/\d{2}/\d{2}$"
+)
+# UK government gilts are gilt-edged securities, exempt from capital gains tax
+# (TCGA 1992 s115). IBKR's ticker for them is UKT.
+_GILT_ISSUERS: Final = frozenset({"UKT"})
 
 
 def _isin_from_description(description: str) -> Isin | None:
@@ -77,6 +92,12 @@ def _action_from_str(action_type: str, file_path: Path) -> ActionType:
         return ActionType.SELL
     if action_type == "Foreign Tax Withholding":
         return ActionType.DIVIDEND_TAX
+    # A "Transaction Fee" naming a security is a charge on that day's trades
+    # in it, such as Spain's financial transaction tax. It is an incidental
+    # cost of those trades (TCGA 1992 s38(2)), so the parser folds it into
+    # them once the whole file is read; FEE marks it until then.
+    if action_type == "Transaction Fee":
+        return ActionType.FEE
     # "FX Translations P&L" arrives as an Adjustment: the revaluation of a
     # foreign currency balance. A "Forex Trade Component" is the base-currency
     # net of a conversion, filed under the currency pair. Neither is a trade in
@@ -106,6 +127,9 @@ def _action_from_str(action_type: str, file_path: Path) -> ActionType:
         "Debit Interest",
         "Sales Tax",
         "Other Fee",
+        # Accrued interest paid with a bond purchase. It belongs to income tax
+        # (the accrued income scheme), not to the bond's capital cost.
+        "Investment Interest Paid",
     }:
         return ActionType.ADJUSTMENT
 
@@ -164,6 +188,33 @@ class InteractiveBrokersTransaction(BrokerTransaction):
             else None
         )
 
+        option_contract = (
+            parse_ibkr_option(symbol, date)
+            if symbol is not None and action in {ActionType.BUY, ActionType.SELL}
+            else None
+        )
+        # The price as exported, in the price currency, before it is converted
+        # below. An option assignment would deliver shares at the strike, and
+        # the strike is in that currency.
+        price_as_exported = price
+
+        bond = _BOND_SYMBOL_RE.fullmatch(symbol) if symbol is not None else None
+        if bond is not None and action in {ActionType.BUY, ActionType.SELL}:
+            if bond.group("issuer") not in _GILT_ISSUERS:
+                raise ParsingError(
+                    file_path,
+                    f"'{symbol}' looks like a bond, and only UK gilts are "
+                    "supported for Interactive Brokers. A corporate bond may "
+                    "be a qualifying corporate bond, exempt like a gilt, or "
+                    "not: work out its gains by hand.",
+                )
+            # Exempt, so only the cash moves (TCGA 1992 s115).
+            action = ActionType.ADJUSTMENT
+
+        if action is ActionType.FEE and symbol is None:
+            # A transaction fee naming no security is a charge on the account.
+            action = ActionType.ADJUSTMENT
+
         # Withholding with no security behind it is tax on the account's cash
         # interest, not on a dividend, so INTEREST_TAX reports it against the
         # interest it was taken from. The Schwab parser makes the same switch.
@@ -208,6 +259,31 @@ class InteractiveBrokersTransaction(BrokerTransaction):
                     "missing-price one.",
                 )
             price = price * exchange_rate
+        if option_contract is not None and price is not None:
+            # One contract is a right over `multiplier` shares, and the
+            # calculator counts contracts, so it is priced per contract.
+            price = price * option_contract.multiplier
+
+        # Net Amount is everything the trade cost or raised, so its gap to
+        # Gross Amount is every incidental cost of it: the commission and, for
+        # a UK share, the stamp duty and PTM levy IBKR adds to Net Amount
+        # without showing them in Commission. All are allowable costs (TCGA
+        # 1992 s38(2)). The gap can only add to the commission: one that takes
+        # from it is not a cost, and read as one would understate the gain.
+        gross = _parse_decimal(row, InteractiveBrokersColumn.GROSS_AMOUNT)
+        if (
+            action in {ActionType.BUY, ActionType.SELL}
+            and gross is not None
+            and amount is not None
+        ):
+            if amount - gross - fees > NET_AMOUNT_ROUNDING:
+                raise ParsingError(
+                    file_path,
+                    f"Net Amount {amount} is more than Gross Amount {gross} plus "
+                    f"Commission {fees}, so it holds something that is not a "
+                    "cost of the trade. Check the row against IBKR.",
+                )
+            fees = amount - gross
 
         super().__init__(
             date=date,
@@ -221,10 +297,12 @@ class InteractiveBrokersTransaction(BrokerTransaction):
             currency=CurrencyCode("GBP"),
             broker="Interactive Brokers",
             isin=_isin_from_description(row[InteractiveBrokersColumn.DESCRIPTION]),
+            option_contract=option_contract,
         )
+        self.price_as_exported = price_as_exported
 
 
-class InteractiveBrokersParser(StandardCSVParser[InteractiveBrokersTransaction]):
+class InteractiveBrokersParser(StandardCSVParser[BrokerTransaction]):
     """Parser for Interactive Brokers format transaction files."""
 
     arg_name = "interactive-brokers"
@@ -244,6 +322,24 @@ class InteractiveBrokersParser(StandardCSVParser[InteractiveBrokersTransaction])
     ) -> InteractiveBrokersTransaction | None:
         """Read a single transaction from a row in the CSV."""
         return InteractiveBrokersTransaction(row, file_path)
+
+    @classmethod
+    @override
+    def read_transactions(
+        cls, file: TextIO, file_path: Path
+    ) -> list[BrokerTransaction]:
+        """Read the rows, then settle what a row cannot say on its own.
+
+        A Transaction Fee is a cost of other rows, and an option row says
+        neither whether it opened or closed a position nor when one expired,
+        which takes the whole file and its header to work out.
+        """
+        text = file.read()
+        transactions = super().read_transactions(io.StringIO(text), file_path)
+        transactions = _fold_transaction_fees(transactions, file_path)
+        return reconcile_ibkr_options(
+            transactions, _statement_summary(text, file_path), file_path
+        )
 
     @classmethod
     @override
@@ -273,8 +369,8 @@ class InteractiveBrokersParser(StandardCSVParser[InteractiveBrokersTransaction])
     @classmethod
     @override
     def post_process_transactions(
-        cls, transactions: list[InteractiveBrokersTransaction]
-    ) -> list[InteractiveBrokersTransaction]:
+        cls, transactions: list[BrokerTransaction]
+    ) -> list[BrokerTransaction]:
         """Sort transactions by date, reading each day's sales last.
 
         IBKR can list a day's rows newest first, so a security bought and then
@@ -286,3 +382,62 @@ class InteractiveBrokersParser(StandardCSVParser[InteractiveBrokersTransaction])
         """
         transactions.sort(key=lambda t: (t.date, t.action is ActionType.SELL))
         return transactions
+
+
+def _statement_summary(text: str, file_path: Path) -> StatementSummary:
+    """Read the period end and cash balances an export's header states."""
+    fields = {
+        record[2]: record[3]
+        for record in csv.reader(text.splitlines())
+        if record[:2] in (["Statement", "Data"], ["Summary", "Data"])
+        and len(record) >= EXPECTED_COLS_IN_SUMMARY_SECTION
+    }
+    try:
+        period_end = datetime.datetime.strptime(
+            fields["Period"].split(" - ")[-1].strip(), "%B %d, %Y"
+        ).date()
+    except (KeyError, ValueError):
+        period_end = None
+
+    def cash(name: str) -> Decimal | None:
+        value = fields.get(name)
+        return parse_decimal(value, f"{name} in {file_path}") if value else None
+
+    return StatementSummary(period_end, cash("Starting Cash"), cash("Ending Cash"))
+
+
+def _fold_transaction_fees(
+    transactions: list[BrokerTransaction], file_path: Path
+) -> list[BrokerTransaction]:
+    """Add each security's Transaction Fees to that day's trades in it.
+
+    IBKR posts a charge such as Spain's financial transaction tax, and any
+    correction of it, as rows of their own. The day's net is shared between
+    that day's trades in the security in proportion to their quantity.
+    """
+    totals: dict[tuple[datetime.date, str | None], Decimal] = {}
+    for fee in (t for t in transactions if t.action is ActionType.FEE):
+        key = (fee.date, fee.symbol)
+        totals[key] = totals.get(key, Decimal(0)) + (fee.amount or Decimal(0))
+    rest = [t for t in transactions if t.action is not ActionType.FEE]
+    for (date, symbol), total in totals.items():
+        trades = [
+            t
+            for t in rest
+            if (t.date, t.symbol) == (date, symbol)
+            and t.action in {ActionType.BUY, ActionType.SELL}
+        ]
+        quantity = sum((t.quantity or Decimal(0) for t in trades), Decimal(0))
+        if not quantity:
+            raise ParsingError(
+                file_path,
+                f"A Transaction Fee of {total} for {symbol} on {date} has no "
+                f"trade in {symbol} that day to be a cost of.",
+            )
+        for t in trades:
+            share = total * (t.quantity or Decimal(0)) / quantity
+            # The fee row is signed as it moves cash, so a charge lowers the
+            # trade's amount and raises its fees.
+            t.amount = (t.amount or Decimal(0)) + share
+            t.fees -= share
+    return rest
