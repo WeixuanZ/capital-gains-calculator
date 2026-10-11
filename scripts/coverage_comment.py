@@ -344,9 +344,11 @@ def render(
     else:
         total = percent(head["coverage"])
 
+    # GitHub links a bare SHA to its commit, and shows one in backticks as
+    # code instead.
     footer = (
         f"[Full report on Codecov](https://app.codecov.io/gh/{repo}/pull/{pull})"
-        f" for commit `{compare['head_commit'][:7]}`."
+        f" for commit {compare['head_commit'][:7]}."
     )
     aligned = [file for file in compare["files"] if file["name"]["head"] not in shifted]
     body = [
