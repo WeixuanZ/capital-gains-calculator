@@ -7,13 +7,19 @@ from dataclasses import dataclass, field, fields
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from .model import ExcessReportedIncomeDistribution, ForeignCurrencyAmount, Position
+from .model import (
+    ActionType,
+    ExcessReportedIncomeDistribution,
+    ForeignCurrencyAmount,
+    Position,
+)
 
 if TYPE_CHECKING:
     import datetime
 
     from .model import (
         AcquisitionLog,
+        BrokerTransaction,
         CalculationEntry,
         CalculationLog,
         CurrencyCode,
@@ -50,6 +56,9 @@ class PreparedHistory:
     option_disposal_list: dict[datetime.date, dict[str, OptionDisposalData]] = field(
         default_factory=lambda: defaultdict(dict)
     )
+    # The grant and buy-back rows of written options, for listing the ones
+    # still open: a written option is no holding, so no pool shows it.
+    written_option_rows: list[BrokerTransaction] = field(default_factory=list)
     # No gain/no loss transfers to a spouse/civil partner. Kept separate from
     # disposal_list so they never enter the taxable disposal totals.
     transfer_to_spouse_list: HmrcTransactionLog = field(default_factory=dict)
@@ -135,6 +144,25 @@ class PreparedHistory:
     eris: ExcessReportedIncomeLog = field(default_factory=lambda: defaultdict(dict))
     # The date of the earliest transaction, where the walk starts.
     first_date: datetime.date | None = None
+
+    def open_written_options(self, as_of: datetime.date) -> dict[str, Decimal]:
+        """Return the contracts still written on a day, by option series.
+
+        A grant counts the contracts it wrote less any assigned, and a buy-back
+        takes contracts off. No export has a row for an expiry, so an option
+        past its expiry date has ended, as the parsers read it too.
+        """
+        written: dict[str, Decimal] = defaultdict(Decimal)
+        for row in self.written_option_rows:
+            contract = row.option_contract
+            if contract is None or row.date > as_of or contract.expiry < as_of:
+                continue
+            if row.action is ActionType.OPTION_GRANT:
+                tax = row.written_option_tax
+                written[contract.series] += tax.taxable_quantity if tax else Decimal(0)
+            else:  # Only grants and buy-backs are recorded.
+                written[contract.series] -= row.quantity or Decimal(0)
+        return {name: count for name, count in sorted(written.items()) if count > 0}
 
 
 @dataclass

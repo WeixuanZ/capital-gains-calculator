@@ -263,6 +263,16 @@ class OptionContract:
             f"{self.expiry.isoformat()} at a strike of {strip_zeros(self.strike)}"
         )
 
+    @property
+    def series(self) -> str:
+        """Name the series as IBKR does: underlying, expiry, strike and type.
+
+        A bought option is pooled, and a written one listed, under this name.
+        """
+        expiry = self.expiry.strftime("%d%b%y").upper()
+        kind = "C" if self.option_type is OptionType.CALL else "P"
+        return f"{self.underlying} {expiry} {strip_zeros(self.strike)} {kind}"
+
 
 @dataclass(frozen=True)
 class DatedAmount:
@@ -811,6 +821,8 @@ class CapitalGainsReport:
     # Before the dividend allowance began in 2016/17, most dividends carried a
     # tax credit, so the amount received is not the amount taxed.
     dividends_carry_tax_credit: bool = False
+    # Written options still open at the end of the period: contracts by name.
+    written_options: dict[str, Decimal] = field(default_factory=dict)
 
     def period_label(self) -> str | None:
         """Label for a custom reporting period, None for a full tax year."""

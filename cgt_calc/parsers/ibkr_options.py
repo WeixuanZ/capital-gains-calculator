@@ -79,16 +79,6 @@ def parse_ibkr_option(symbol: str, date: datetime.date) -> OptionContract | None
     )
 
 
-def option_series_name(contract: OptionContract) -> str:
-    """Name a series the way IBKR describes it: underlying, expiry, strike, type.
-
-    A purchased option is pooled under this name, apart from its underlying.
-    """
-    expiry = contract.expiry.strftime("%d%b%y").upper()
-    kind = "C" if contract.option_type is OptionType.CALL else "P"
-    return f"{contract.underlying} {expiry} {strip_zeros(contract.strike)} {kind}"
-
-
 @dataclass(frozen=True)
 class StatementSummary:
     """What an export's header says about the period and cash it covers."""
@@ -165,7 +155,7 @@ def _apply_trade(
     opening = row.quantity - closing
     # Grant and close rows state the premium per share, as Schwab's do.
     per_share = row.price / contract.multiplier
-    held_as = {"symbol": option_series_name(contract), "option_contract": None}
+    held_as = {"symbol": contract.series, "option_contract": None}
     out = []
     if closing and buying:
         close = _part(row, closing, action=ActionType.OPTION_CLOSE, price=per_share)
@@ -259,7 +249,7 @@ def _expire(
     if summary.period_end is None or summary.period_end < settled_by:
         LOGGER.info(
             "%s contract(s) of the %s are open at the end of the export",
-            strip_zeros(series.position),
+            strip_zeros(abs(series.position)),
             contract,
         )
         return None
@@ -281,7 +271,7 @@ def _expire(
     )
     if series.position < 0:
         return None  # A written option's grant keeps its premium as the gain.
-    name = option_series_name(contract)
+    name = contract.series
     return _copy(
         series.last_row,
         date=contract.expiry,

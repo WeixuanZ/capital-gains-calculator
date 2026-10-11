@@ -364,11 +364,33 @@ def test_written_option_bought_back_gains_premium_less_cost(tmp_path: Path) -> N
     assert figures["Gain"] == "£78.00"
 
 
-def test_iag_listings_pool_as_one_holding(tmp_path: Path) -> None:
-    """IBKR names IAG's London line IAG and IAGl; both are one holding."""
-    figures = tax_summary(
+def test_open_written_options_are_listed_with_the_portfolio(tmp_path: Path) -> None:
+    """A written option still open is shown as contracts written, not a holding.
+
+    The put bought back and the put that expired are gone; the call expiring
+    after the tax year is open both at the end of the history and at the end
+    of the tax year.
+    """
+    late_call = "XYZ   260619C00050000"
+    expired_put = "XYZ   250620P00040000"
+    path = export(
         tmp_path,
-        "2025-06-02,Buy,IAG,100,3,GBP,-300,-,-300,1.0",
-        "2025-06-10,Sell,IAGl,-100,4,GBP,400,-,400,1.0",
+        DEPOSIT,
+        f"2025-06-02,Sell,{PUT},-1,2,USD,100,-1,99,0.5",
+        f"2025-06-10,Buy,{PUT},1,0.4,USD,-20,-1,-21,0.5",
+        f"2025-06-03,Sell,{expired_put},-1,1,USD,50,-1,49,0.5",
+        f"2025-06-04,Sell,{late_call},-2,3,USD,300,-2,298,0.5",
+        "2025-12-01,Deposit,-,-,-,-,10,-,10,1.0",
     )
-    assert figures["Gain"] == "£100.00"
+    cmd = build_cmd(
+        "--year", "2025", "--interactive-brokers-file", str(path), "--no-report"
+    )  # fmt: skip
+    stdout = run_cli(cmd).stdout
+    final, at_year_end = (
+        stdout.split(heading)[1].split("\n\n")[0]
+        for heading in ("Final portfolio", "Portfolio at the end of")
+    )
+    written = "XYZ 19JUN26 50 C: -2 written"
+    for portfolio in (final, at_year_end):
+        assert written in portfolio
+        assert " P: " not in portfolio

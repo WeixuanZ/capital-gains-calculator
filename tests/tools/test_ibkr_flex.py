@@ -78,12 +78,12 @@ def test_spin_off_names_its_parent() -> None:
     """The new holding's row names the company it was spun off from."""
     actions = corporate_actions(
         flex(
-            "STK,USD,NEWCO,US0000000002,ABC(US0000000001) SPINOFF  1 FOR 4 "
-            "(NEWCO; NEW COMPANY; US0000000002),20251031,20251030;202000,0.5,SO"
+            "STK,USD,NEWCO,US0000000002,ABC(US0000000001) SPINOFF  1 FOR 2 "
+            "(NEWCO; NEW COMPANY; US0000000002),20250315,20250314;202000,3,SO"
         )
     )
     assert actions == CorporateActions(
-        [RawRow(dt.date(2025, 10, 30), "SPIN_OFF", "NEWCO", Decimal("0.5"), "USD")],
+        [RawRow(dt.date(2025, 3, 14), "SPIN_OFF", "NEWCO", Decimal(3), "USD")],
         {"NEWCO": "ABC"},
     )
     assert actions.spin_offs_csv() == "dst,src\nNEWCO,ABC\n"

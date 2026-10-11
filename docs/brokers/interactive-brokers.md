@@ -129,7 +129,10 @@ opens the other side.
     the option was written
     ([CG55545](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg55545)). Re-run the
     earlier tax year when an option written in it is bought back in a later one. An option that
-    expires leaves the premium as the gain.
+    expires leaves the premium as the gain. A written option is no holding, so the portfolio lists
+    the ones still open after the holdings, as contracts written, such as
+    `ABC 20JUN25 10 P: -1
+    written`.
 
 The export has no row for an expiry, so cgt-calc infers one for a position still open after its
 expiry date, but only when the export runs at least seven days past it and its rows add up to the
@@ -231,6 +234,23 @@ Pass the two files to cgt-calc with `--raw-file` and `--spin-offs-file`. Splits 
 become `STOCK_SPLIT` rows and spin-offs become `SPIN_OFF` rows, with the company each came from. Any
 other event, such as a merger, stops the command: each needs its own treatment. Check each date
 against the company's announcement, because a spin-off is dated the first day both shares trade.
+
+### Finding corporate actions the inputs lack
+
+A missing split or ticker change often gives no error until the share is sold. Run
+`check-corporate-actions` with the same files before each calculation:
+
+```shell
+uv run python -m scripts.cgt_tools check-corporate-actions --t212-dir trading212/ \
+  --ibkr-file merged.csv --raw-file corporate_actions.csv --spin-offs-file spin_offs.csv
+```
+
+For every share held at some point, it asks Yahoo Finance for its splits and whether it is still
+quoted. It stops on a split, or the fractional adjustment Yahoo records for a spin-off, on a day the
+share was held with no `STOCK_SPLIT` or `SPIN_OFF` row within three days, and on a share still held
+that Yahoo has stopped quoting, which usually means a ticker change, a merger or the share leaving
+the exchange. Known ticker changes are looked up under the new ticker, and a share traded in pounds
+or pence as its London listing. A share Yahoo cannot be asked about is listed as not checked.
 
 ### Checking a report
 

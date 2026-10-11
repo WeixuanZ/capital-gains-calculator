@@ -1002,6 +1002,7 @@ class TransactionIngester:
     ) -> Decimal:
         """Record a written-option row and return its cash movement."""
         amount = get_amount_or_fail(transaction)
+        self.history.written_option_rows.append(transaction)
         if transaction.action is ActionType.OPTION_GRANT:
             self.add_written_option_grant(transaction)
         return amount
@@ -1779,11 +1780,14 @@ class TransactionIngester:
                 dividends_tax=dividends_tax,
                 interests=interests,
                 interest_taxes=interest_taxes,
-            )
+            ),
+            as_of=max((t.date for t in transactions), default=None),
         )
 
-    def first_pass_report(self, totals: FirstPassTotals) -> None:
-        """Print the results of the first pass."""
+    def first_pass_report(
+        self, totals: FirstPassTotals, as_of: datetime.date | None = None
+    ) -> None:
+        """Print the results of the first pass, holdings as of `as_of`."""
         LOGGER.info(
             "\n%s\n",
             style_text(
@@ -1792,10 +1796,13 @@ class TransactionIngester:
         )
         bul = bullet(sys.stdout)
         print(style_text("Final portfolio", colour=Style.BRIGHT, emoji="📊"))
-        if not self.run.portfolio:
+        written = self.history.open_written_options(as_of) if as_of else {}
+        if not self.run.portfolio and not written:
             print(f"{bul}(none)")
         for stock, position in sorted(self.run.portfolio.items()):
             print(f"{bul}{stock}: {position}")
+        for option, contracts in written.items():
+            print(f"{bul}{option}: -{strip_zeros(contracts)} written")
         print()
         print(style_text("Final balance", colour=Style.BRIGHT, emoji="💰"))
         for (broker, currency), amount in totals.balance.items():

@@ -9,7 +9,7 @@ from typing import Annotated
 
 import typer
 
-from . import cross_check, ibkr_flex, ibkr_merge
+from . import corporate_actions, cross_check, ibkr_flex, ibkr_merge
 
 app = typer.Typer(no_args_is_help=True, help=__doc__)
 
@@ -93,6 +93,46 @@ def ibkr_corporate_actions_command(
     typer.echo(
         "Check each date against the company's announcement before relying on it."
     )
+
+
+@app.command("check-corporate-actions")
+def check_corporate_actions_command(
+    t212_dir: Annotated[Path | None, typer.Option(exists=True, file_okay=False)] = None,
+    ibkr_file: Annotated[Path | None, typer.Option(exists=True, dir_okay=False)] = None,
+    raw_file: Annotated[Path | None, typer.Option(exists=True, dir_okay=False)] = None,
+    spin_offs_file: Annotated[
+        Path | None, typer.Option(exists=True, dir_okay=False)
+    ] = None,
+    alias: Annotated[
+        list[str] | None, typer.Option(help="Ticker alias as FROM=TO.")
+    ] = None,
+) -> None:
+    """Find splits, spin-offs and ticker changes the inputs do not record."""
+    try:
+        data = cross_check.read_inputs(
+            t212_dir=t212_dir,
+            ibkr_file=ibkr_file,
+            raw_file=raw_file,
+            aliases=dict(item.split("=") for item in alias or []),
+        )
+        sources = {}
+        if spin_offs_file:
+            lines = spin_offs_file.read_text(encoding="utf-8").splitlines()[1:]
+            sources = dict(line.split(",")[:2] for line in lines if line.strip())
+    except (ValueError, KeyError, ArithmeticError) as err:
+        raise _fail(err) from err
+    findings = corporate_actions.check(data, sources)
+    for note in findings.unchecked:
+        typer.secho(f"Not checked: {note}", err=True, fg=typer.colors.YELLOW)
+    for note in findings.missing:
+        typer.secho(f"Missing: {note}", err=True, fg=typer.colors.RED)
+    if findings.missing:
+        typer.echo(
+            "Record each in the RAW file (STOCK_SPLIT or SPIN_OFF), or add the "
+            "ticker change to cgt-calc's rename table, and run again."
+        )
+        raise typer.Exit(1)
+    typer.echo("Every split, spin-off and ticker change found is recorded.")
 
 
 @app.command("cross-check")

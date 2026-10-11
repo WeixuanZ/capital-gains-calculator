@@ -73,7 +73,7 @@ def test_corporate_actions_writes_raw_and_spin_off_files(tmp_path: Path) -> None
     flex = tmp_path / "flex.csv"
     flex.write_text(
         "Asset Class,Currency,Symbol,Description,Date/Time,Quantity,Type\n"
-        "STK,USD,NEWCO,ABC(US0000000001) SPINOFF 1 FOR 4,20251030,0.5,SO\n",
+        "STK,USD,NEWCO,ABC(US0000000001) SPINOFF 1 FOR 2,20250314,3,SO\n",
         encoding="utf-8",
     )
     raw, spins = tmp_path / "raw.csv", tmp_path / "spins.csv"
@@ -83,7 +83,7 @@ def test_corporate_actions_writes_raw_and_spin_off_files(tmp_path: Path) -> None
     assert result.exit_code == 0, result.output
     assert (
         raw.read_text(encoding="utf-8").splitlines()[1]
-        == "2025-10-30,SPIN_OFF,NEWCO,0.5,0,0,USD"
+        == "2025-03-14,SPIN_OFF,NEWCO,3,0,0,USD"
     )
     assert spins.read_text(encoding="utf-8") == "dst,src\nNEWCO,ABC\n"
 
@@ -92,7 +92,7 @@ def test_corporate_actions_refusal_exits_non_zero(tmp_path: Path) -> None:
     """An unsupported event is named and nothing is written."""
     flex = tmp_path / "flex.csv"
     flex.write_text(
-        "Asset Class,Symbol,Description,Date/Time,Quantity,Type\nSTK,ABC,MERGER,20251030,1,TC\n",
+        "Asset Class,Symbol,Description,Date/Time,Quantity,Type\nSTK,ABC,MERGER,20250314,1,TC\n",
         encoding="utf-8",
     )
     result = runner.invoke(

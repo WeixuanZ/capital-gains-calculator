@@ -52,13 +52,15 @@ def _render_portfolio(report: CapitalGainsReport) -> str:
         + "\n"
     )
     held = [entry for entry in report.portfolio if entry.quantity > 0]
-    if not held:
+    if not held and not report.written_options:
         out += f"{bul}(none)\n"
     for entry in sorted(held, key=lambda entry: entry.symbol):
         unrealized_gains_str = (
             entry.unrealized_gains_str() if report.show_unrealized_gains else ""
         )
         out += f"{bul}{entry!s}{unrealized_gains_str}\n"
+    for option, contracts in report.written_options.items():
+        out += f"{bul}{option}: -{strip_zeros(contracts)} written\n"
     return out
 
 

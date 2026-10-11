@@ -57,6 +57,10 @@ class Inputs:
     options: list[tuple[dt.date, str, str, Decimal, Decimal]] = field(
         default_factory=list
     )
+    # Tickers traded in pounds or pence, which are London listings.
+    london: set[str] = field(default_factory=set)
+    # Reorganisations a broker export records itself, by date and ticker.
+    broker_splits: set[tuple[dt.date, str]] = field(default_factory=set)
 
 
 def read_inputs(
@@ -74,13 +78,19 @@ def read_inputs(
         with path.open(encoding="utf-8-sig") as file:
             for r in csv.DictReader(file):
                 action = r["Action"].lower()
+                when = dt.datetime.fromisoformat(r["Time"][:19]).replace(tzinfo=UTC)
+                if "split" in action:
+                    data.broker_splits.add(
+                        (when.astimezone(LONDON).date(), r["Ticker"])
+                    )
                 if "buy" not in action and "sell" not in action:
                     continue
+                if r.get("Currency (Price / share)") in {"GBP", "GBX"}:
+                    data.london.add(r["Ticker"])
                 if r["Currency (Total)"] != "GBP":
                     raise ValueError(
                         f"{path.name}: only a GBP Trading 212 account is supported"
                     )
-                when = dt.datetime.fromisoformat(r["Time"][:19]).replace(tzinfo=UTC)
                 side = "B" if "buy" in action else "S"
                 data.trades.append(
                     (
@@ -109,6 +119,8 @@ def read_inputs(
                 elif OCC.fullmatch(rec[6]):
                     data.options.append((day, kind, rec[6], abs(Decimal(rec[7])), net))
                 else:
+                    if rec[9] == "GBP":
+                        data.london.add(symbol)
                     data.trades.append(
                         (
                             day,
