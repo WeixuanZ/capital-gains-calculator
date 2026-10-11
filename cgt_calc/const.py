@@ -274,6 +274,8 @@ ISIN_TICKER_ALIASES: Final[dict[tuple[Isin, str], str]] = {
     (Isin("US67066G1040"), "NVD"): "NVDA",
     (Isin("US11135F1012"), "1YD"): "AVGO",
     (Isin("DE0007030009"), "RHMd"): "RHM",
+    # IBKR names the London line of IAG both IAG and IAGl.
+    (Isin("ES0177542018"), "IAGl"): "IAG",
     (Isin("US88160R1014"), "TL0"): "TSLA",
     (Isin("US19260Q1076"), "1QZ"): "COIN",
     (Isin("US0231351067"), "AMZ"): "AMZN",
