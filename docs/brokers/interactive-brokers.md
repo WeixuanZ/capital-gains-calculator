@@ -120,9 +120,9 @@ opens the other side.
 
 - **Bought options** are held like shares, one holding per series, named as IBKR describes it, such
     as `ABC 20JUN25 10 C`, and matched under the same-day, 30-day and Section 104 rules. One that
-    expires unexercised is a disposal for nothing on its expiry date, so its cost is a loss
-    ([TCGA 1992 s144(4)](https://www.legislation.gov.uk/ukpga/1992/12/section/144)). Cash-settled
-    index options such as `SPX` are treated the same way.
+    expires without being exercised is a disposal for nothing on its expiry date, so its cost is a
+    loss ([TCGA 1992 s144(4)](https://www.legislation.gov.uk/ukpga/1992/12/section/144)).
+    Cash-settled index options such as `SPX` are treated the same way.
 - **Written options** are disposals on the day they are written, with the premium as the proceeds
     ([CG55536](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg55536)). Buying one
     back is an allowable cost of that grant, oldest grant first, and the gain stays dated on the day
@@ -133,7 +133,7 @@ opens the other side.
 
 The export has no row for an expiry, so cgt-calc infers one for a position still open after its
 expiry date, but only when the export runs at least seven days past it and its rows add up to the
-change in cash its summary states. Otherwise a settlement could be missing, and it stops instead.
+change in cash its summary states. Otherwise, a settlement could be missing, and it stops instead.
 Exercise and assignment are not supported: if a trade in the underlying could be an option's
 delivery, a multiple of 100 shares at the strike between the option's first trade and a week after
 its expiry, cgt-calc stops.

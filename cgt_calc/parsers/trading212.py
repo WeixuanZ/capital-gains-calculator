@@ -679,9 +679,10 @@ class Trading212Transaction(BrokerTransaction):
         other. The row's exchange rate is not used: exports made before late
         2025 give none on a dividend, and it adds nothing to these figures.
 
-        Tax in pounds or pence on a security outside the UK is foreign tax
-        that Trading 212 converted, such as Spain's on a London-traded Spanish
-        share, so in a pound account it is used as it is, pence as hundredths.
+        Tax in pounds or pence on a non-UK security is foreign tax, which
+        Trading 212 has converted: for example, the tax Spain takes from the
+        dividend of a Spanish company traded in London. In a pound
+        account it is used as it is, and pence as hundredths of a pound.
         On a UK security it stays in the amount received: it may be UK tax, for
         example on a property income distribution, which is not foreign tax. So
         it does in an account in another currency, which the row gives no rate

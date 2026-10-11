@@ -59,7 +59,9 @@ def export(
         for r in rows
     )
     path = tmp_path / "transactions.csv"
-    path.write_text("\n".join(lines) + "\n" + HEADER + "\n".join(data) + "\n")
+    path.write_text(
+        "\n".join(lines) + "\n" + HEADER + "\n".join(data) + "\n", encoding="utf-8"
+    )
     return path
 
 

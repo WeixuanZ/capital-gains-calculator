@@ -52,7 +52,7 @@ def test_merge_writes_one_file(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "dropped 2025-02-03 Sell ABC" in result.output
-    assert "Ending Cash,100" in (tmp_path / "out.csv").read_text()
+    assert "Ending Cash,100" in (tmp_path / "out.csv").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("drop", ["2025-02-03,Sell", "2025-02-03,Sell,XYZ"])
@@ -73,22 +73,27 @@ def test_corporate_actions_writes_raw_and_spin_off_files(tmp_path: Path) -> None
     flex = tmp_path / "flex.csv"
     flex.write_text(
         "Asset Class,Currency,Symbol,Description,Date/Time,Quantity,Type\n"
-        "STK,USD,NEWCO,ABC(US0000000001) SPINOFF 1 FOR 4,20251030,0.5,SO\n"
+        "STK,USD,NEWCO,ABC(US0000000001) SPINOFF 1 FOR 4,20251030,0.5,SO\n",
+        encoding="utf-8",
     )
     raw, spins = tmp_path / "raw.csv", tmp_path / "spins.csv"
     result = runner.invoke(
         app, ["ibkr-corporate-actions", str(flex), str(raw), str(spins)]
     )
     assert result.exit_code == 0, result.output
-    assert raw.read_text().splitlines()[1] == "2025-10-30,SPIN_OFF,NEWCO,0.5,0,0,USD"
-    assert spins.read_text() == "dst,src\nNEWCO,ABC\n"
+    assert (
+        raw.read_text(encoding="utf-8").splitlines()[1]
+        == "2025-10-30,SPIN_OFF,NEWCO,0.5,0,0,USD"
+    )
+    assert spins.read_text(encoding="utf-8") == "dst,src\nNEWCO,ABC\n"
 
 
 def test_corporate_actions_refusal_exits_non_zero(tmp_path: Path) -> None:
     """An unsupported event is named and nothing is written."""
     flex = tmp_path / "flex.csv"
     flex.write_text(
-        "Asset Class,Symbol,Description,Date/Time,Quantity,Type\nSTK,ABC,MERGER,20251030,1,TC\n"
+        "Asset Class,Symbol,Description,Date/Time,Quantity,Type\nSTK,ABC,MERGER,20251030,1,TC\n",
+        encoding="utf-8",
     )
     result = runner.invoke(
         app,
@@ -117,7 +122,7 @@ def test_fetch_reads_token_and_query_from_the_environment(
     )
     assert result.exit_code == 0, result.output
     assert seen == [("t", "q")]
-    assert out.read_text() == "Symbol,Type\n"
+    assert out.read_text(encoding="utf-8") == "Symbol,Type\n"
 
 
 def test_fetch_failure_exits_non_zero(

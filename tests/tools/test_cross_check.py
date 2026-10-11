@@ -62,13 +62,15 @@ def files(tmp_path: Path) -> dict[str, Path]:
     raw.write_text(
         "date,action,symbol,quantity,price,fees,currency\n"
         "2025-05-15,STOCK_SPLIT,XYZ,9,0,0,GBP\n"
-        "2025-05-20,SPIN_OFF,CHD,1,0,0,GBP\n"
+        "2025-05-20,SPIN_OFF,CHD,1,0,0,GBP\n",
+        encoding="utf-8",
     )
     spin_offs = tmp_path / "spin_offs.csv"
-    spin_offs.write_text("dst,src\nCHD,PAR\n")
+    spin_offs.write_text("dst,src\nCHD,PAR\n", encoding="utf-8")
     prices = tmp_path / "prices.csv"  # PAR 4 x 90 = 360, CHD 1 x 40 = 40: 10%
     prices.write_text(
-        'date,symbol,price\n"May 20, 2025",PAR,90\n"May 20, 2025",CHD,40\n'
+        'date,symbol,price\n"May 20, 2025",PAR,90\n"May 20, 2025",CHD,40\n',
+        encoding="utf-8",
     )
     return {
         "ibkr": ibkr_export(tmp_path / "ibkr.csv", ROWS),
@@ -142,7 +144,8 @@ def test_cli_reports_agreement(files: dict[str, Path], tmp_path: Path) -> None:
             f" is £{abs(g)}\n"
             for (day, g), n in EXPECTED.items()
             for _ in range(n)
-        )
+        ),
+        encoding="utf-8",
     )
     result = CliRunner().invoke(
         app,
@@ -253,7 +256,9 @@ def test_cli_fails_on_a_difference_or_bad_input(
 ) -> None:
     """A disagreement, or input that cannot be read, exits non-zero."""
     report = tmp_path / "report.tex"
-    report.write_text("\\subsection*{01 June 2025}Chargeable \\textbf{gain} is £1\n")
+    report.write_text(
+        "\\subsection*{01 June 2025}Chargeable \\textbf{gain} is £1\n", encoding="utf-8"
+    )
     base = [
         "cross-check",
         "--year",

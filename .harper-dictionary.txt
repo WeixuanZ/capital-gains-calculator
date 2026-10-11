@@ -346,3 +346,7 @@ xtrackers
 yfinance
 YYYY
 LifeStrategy
+DT17553
+PTM
+s146
+UKT

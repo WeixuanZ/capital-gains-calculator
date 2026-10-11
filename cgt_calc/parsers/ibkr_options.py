@@ -1,15 +1,17 @@
 """Exchange-traded option support for Interactive Brokers exports.
 
 The Transaction History export lists an option trade as a plain Buy or Sell of
-an OCC symbol such as ``ABC   250620P00010000``. It does not say whether a row
+its OCC symbol: the underlying padded to six characters, the expiry's year,
+month and day in six digits, a C for a call or a P for a put, and the strike
+times 1000 in eight digits. It does not say whether a row
 opened or closed a position, and it has no row at all for an option that
 expired. This module reads each series' rows in date order, works out what
 each one did from the running position, and hands the calculator what UK tax
 treats them as:
 
 - A purchased option is an asset like any other: buying it is an acquisition
-  and selling it a disposal, pooled per series. One that expires unexercised
-  is abandoned, a disposal for nothing, so its cost becomes an allowable loss
+  and selling it a disposal, pooled per series. One that expires without being
+  exercised is abandoned, a disposal for nothing, so its cost becomes an allowable loss
   (TCGA 1992 s144(4)(b); a traded option is not a wasting asset, s146(1)(b)).
   Cash-settled index options are treated the same way.
 - Writing an option is the grant of an asset, a disposal on the day it was
@@ -27,7 +29,8 @@ the parser stops.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+import copy
+from dataclasses import dataclass, field
 import datetime
 from decimal import Decimal
 import re
@@ -77,7 +80,7 @@ def parse_ibkr_option(symbol: str, date: datetime.date) -> OptionContract | None
 
 
 def option_series_name(contract: OptionContract) -> str:
-    """Name a series the way IBKR describes it, such as ``ABC 20JUN25 10 C``.
+    """Name a series the way IBKR describes it: underlying, expiry, strike, type.
 
     A purchased option is pooled under this name, apart from its underlying.
     """
@@ -122,13 +125,16 @@ class _Series:
 
 
 def _copy(row: BrokerTransaction, **changes: object) -> BrokerTransaction:
-    """Copy a row as a plain BrokerTransaction, with some fields changed.
+    """Copy a row with some fields changed.
 
     The parser's own row class is built from a CSV row, so it cannot be
-    rebuilt field by field the way `dataclasses.replace` would.
+    rebuilt field by field the way `dataclasses.replace` would. A shallow
+    copy shares the row's lists and dictionaries, which nothing here changes.
     """
-    values = {f.name: getattr(row, f.name) for f in fields(BrokerTransaction) if f.init}
-    return BrokerTransaction(**(values | changes))
+    new = copy.copy(row)
+    for name, value in changes.items():
+        setattr(new, name, value)
+    return new
 
 
 def _part(

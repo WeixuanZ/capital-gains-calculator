@@ -88,7 +88,10 @@ def test_disagreeing_overlap_is_refused(tmp_path: Path) -> None:
 def test_export_that_does_not_add_up_is_refused(tmp_path: Path) -> None:
     """A filtered export no longer adds up to the cash its summary states."""
     path = first_half(tmp_path)
-    path.write_text(path.read_text().replace("Ending Cash,897", "Ending Cash,900"))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("Ending Cash,897", "Ending Cash,900"),
+        encoding="utf-8",
+    )
     with pytest.raises(MergeError, match="filtered or incomplete"):
         read_export(path)
 
@@ -96,7 +99,12 @@ def test_export_that_does_not_add_up_is_refused(tmp_path: Path) -> None:
 def test_non_gbp_account_is_refused(tmp_path: Path) -> None:
     """Amounts in another base currency would be read as pounds."""
     path = first_half(tmp_path)
-    path.write_text(path.read_text().replace("Base Currency,GBP", "Base Currency,USD"))
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "Base Currency,GBP", "Base Currency,USD"
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(MergeError, match="not GBP"):
         read_export(path)
 
