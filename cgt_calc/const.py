@@ -136,6 +136,9 @@ DIVIDEND_ALLOWANCES: Final[dict[int, int]] = {
 DIVIDEND_DOUBLE_TAXATION_RULES: Final[dict[str, TaxTreaty]] = {
     "US": TaxTreaty("USA", Decimal("0.15"), Decimal("0.15")),
     "PL": TaxTreaty("Poland", Decimal("0.19"), Decimal("0.1")),
+    # Spain withholds 19%; the 2013 convention allows 10% on portfolio
+    # dividends other than property income dividends (DT17553).
+    "ES": TaxTreaty("Spain", Decimal("0.19"), Decimal("0.1")),
 }
 
 # Fallback for transactions with no ISIN: guess the source country from the
