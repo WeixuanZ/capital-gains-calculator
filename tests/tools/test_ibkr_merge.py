@@ -123,7 +123,7 @@ def test_missing_exchange_rate_is_filled_from_the_row(
 ) -> None:
     """Gross Amount over quantity x price (x 100 for an option) is the rate."""
     path = ibkr_export(tmp_path / "old.csv", [row], exchange_rate_column=False)
-    (filled,) = [r for r in merge([read_export(path)]).rows if r["Description"] == "X"]
+    [filled] = [r for r in merge([read_export(path)]).rows if r["Description"] == "X"]
     assert filled["Exchange Rate"] == rate
 
 
